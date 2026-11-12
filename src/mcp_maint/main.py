@@ -75,6 +75,8 @@ import uuid
 from pathlib import Path
 from psycopg_pool import AsyncConnectionPool
 from psycopg.rows import dict_row
+from langchain_openai import AzureOpenAIEmbeddings
+
 # --------------------------------------------------------------------------- #
 # Configuration
 # --------------------------------------------------------------------------- #
@@ -104,7 +106,7 @@ QDRANT_TIMEOUT_SECONDS = float(_env("QDRANT_TIMEOUT_SECONDS", "60"))
 _DEFAULT_KEY = _env("AZURE_FOUNDRY_API_KEY", "")
 
 TEXT_EMBED_URL = _env("AZURE_TEXT_EMBED_URL", required=True)
-TEXT_EMBED_KEY = _env("AZURE_TEXT_EMBED_KEY", _DEFAULT_KEY)
+TEXT_EMBED_KEY = _env("AZURE_TEXT_EMBED_KEY", required=True)
 TEXT_EMBED_MODEL = _env("TEXT_EMBED_MODEL", "text-embedding-3-small")
 
 IMAGE_EMBED_URL = _env("AZURE_IMAGE_EMBED_URL", required=True)
@@ -129,7 +131,12 @@ HTTP_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
 
 _qdrant: Optional[AsyncQdrantClient] = None
 _http: Optional[httpx.AsyncClient] = None
-
+embeddings = AzureOpenAIEmbeddings(
+    model="text-embedding-3-small",
+    azure_endpoint=TEXT_EMBED_URL,
+    api_key=TEXT_EMBED_KEY,
+    openai_api_version="2024-06-01",
+)
 pool = AsyncConnectionPool(
     DATABASE_URL,
     min_size=1,
@@ -218,14 +225,10 @@ async def _post(url: str, key: str, payload: dict[str, Any]) -> dict[str, Any]:
 
 async def embed_text_query(query: str) -> list[float]:
     """text-embedding-3-small (OpenAI-style embeddings API)."""
-    data = await _post(
-        TEXT_EMBED_URL,
-        TEXT_EMBED_KEY,
-        {"model": TEXT_EMBED_MODEL, "input": [query], "dimensions": EMBED_DIM},
+    return await asyncio.to_thread(
+        embeddings.embed_query,
+        query
     )
-    return data["data"][0]["embedding"]
-
-
 async def embed_image_query(data_url: str) -> list[float]:
     """Cohere embed-v4.0 of an IMAGE (data URL) into the same 1536-d image space."""
     data = await _post(
