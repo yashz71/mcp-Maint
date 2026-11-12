@@ -31,7 +31,8 @@ jobs:
       - name: Install dependencies
         run: |
           uv sync --frozen --no-dev
-
+      - name: Export dependencies for Azure Oryx
+        run: uv export --frozen --no-dev --format requirements-txt --output-file requirements.txt
       - name: Upload artifact for deployment
         uses: actions/upload-artifact@v4
         with:
